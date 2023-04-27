@@ -215,6 +215,7 @@ func TestGorm(t *testing.T) {
 	where = append(where, Like{"hobby": "play"})
 	where = append(where, Or{Eq{"sex": 1}, Eq{"sex": 2}})
 	where = append(where, And{Eq{"period": 1}, Eq{"period_unit": 2}})
+	where = append(where, Between{"date": []interface{}{"2019-12", "2023-4"}})
 
 	query, args := ToQueryAndArgs(where)
 	sql := db.ToSQL(func(tx *gorm.DB) *gorm.DB {
@@ -231,7 +232,8 @@ func TestGorm(t *testing.T) {
 		"num IN ('1','2','3') AND "+
 		"hobby LIKE 'play' AND "+
 		"(sex = 1 OR sex = 2) AND "+
-		"(period = 1 AND period_unit = 2)", sql)
+		"(period = 1 AND period_unit = 2) AND "+
+		"date BETWEEN '2019-12' AND '2023-4'", sql)
 }
 
 func getDBMock() (*gorm.DB, sqlmock.Sqlmock, error) {
