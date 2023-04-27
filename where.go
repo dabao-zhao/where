@@ -131,7 +131,7 @@ func (b In) toQueryAndArgs() (query interface{}, args []interface{}) {
 	sortedKeys := getSortedKeys(b)
 	for _, key := range sortedKeys {
 		val := b[key]
-		exprs = append(exprs, fmt.Sprintf("%s IN ?", key))
+		exprs = append(exprs, fmt.Sprintf("%s IN (?)", key))
 		args = append(args, val)
 	}
 

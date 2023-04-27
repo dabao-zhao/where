@@ -3,7 +3,10 @@ package where
 import (
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 func TestEq(t *testing.T) {
@@ -99,7 +102,7 @@ func TestLtOrEq(t *testing.T) {
 func TestIn(t *testing.T) {
 	expr := In{"cate": []string{"123", "456"}}
 	query, args := expr.toQueryAndArgs()
-	assert.Equal(t, "cate IN ?", query)
+	assert.Equal(t, "cate IN (?)", query)
 	assert.Equal(t, []interface{}{[]string{"123", "456"}}, args)
 
 	expr = In{
@@ -107,7 +110,7 @@ func TestIn(t *testing.T) {
 		"id":   "456",
 	}
 	query, args = expr.toQueryAndArgs()
-	assert.Equal(t, "cate IN ? AND id IN ?", query)
+	assert.Equal(t, "cate IN (?) AND id IN (?)", query)
 	assert.Equal(t, []interface{}{[]string{"123", "456"}, "456"}, args)
 }
 
@@ -157,14 +160,14 @@ func TestToQueryAndArgs(t *testing.T) {
 		GtOrEq{"cate": "123"},
 	}
 	query, args := ToQueryAndArgs(exprs)
-	assert.Equal(t, "cate IN ? AND (name = ? OR name = ?) AND cate >= ?", query)
+	assert.Equal(t, "cate IN (?) AND (name = ? OR name = ?) AND cate >= ?", query)
 	assert.Equal(t, []interface{}{[]string{"123", "456"}, "1", "2", "123"}, args)
 
 	exprs = []Expr{
 		In{"cate": []string{"123", "456"}},
 	}
 	query, args = ToQueryAndArgs(exprs)
-	assert.Equal(t, "cate IN ?", query)
+	assert.Equal(t, "cate IN (?)", query)
 	assert.Equal(t, []interface{}{[]string{"123", "456"}}, args)
 
 	query, args = ToQueryAndArgs(nil)
@@ -196,4 +199,51 @@ func TestGetSortedKeys2(t *testing.T) {
 
 	s := getSortedKeys2(v)
 	assert.Equal(t, []string{"a", "ay", "c", "w", "z"}, s)
+}
+
+func TestGorm(t *testing.T) {
+	db, _, _ := getDBMock()
+
+	var where []Expr
+	where = append(where, Eq{"name": "da-bao"})
+	where = append(where, Neq{"cate": 0})
+	where = append(where, GtOrEq{"age": 10})
+	where = append(where, Gt{"width": 100})
+	where = append(where, Lt{"height": 200})
+	where = append(where, LtOrEq{"max": 300})
+	where = append(where, In{"num": []string{"1", "2", "3"}})
+	where = append(where, Like{"hobby": "play"})
+	where = append(where, Or{Eq{"sex": 1}, Eq{"sex": 2}})
+	where = append(where, And{Eq{"period": 1}, Eq{"period_unit": 2}})
+
+	query, args := ToQueryAndArgs(where)
+	sql := db.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		return tx.Table("test").Where(query, args...).Find(nil)
+	})
+
+	assert.Equal(t, "SELECT * FROM `test` WHERE "+
+		"name = 'da-bao' AND "+
+		"cate != 0 AND "+
+		"age >= 10 AND "+
+		"width > 100 AND "+
+		"height < 200 AND "+
+		"max <= 300 AND "+
+		"num IN ('1','2','3') AND "+
+		"hobby LIKE 'play' AND "+
+		"(sex = 1 OR sex = 2) AND "+
+		"(period = 1 AND period_unit = 2)", sql)
+}
+
+func getDBMock() (*gorm.DB, sqlmock.Sqlmock, error) {
+	// mock一个*sql.DB对象，不需要连接真实的数据库
+	db, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+
+	//测试时不需要真正连接数据库
+	gdb, _ := gorm.Open(mysql.New(mysql.Config{
+		DriverName:                "mysql",
+		Conn:                      db,
+		SkipInitializeWithVersion: true,
+	}), &gorm.Config{})
+
+	return gdb, mock, nil
 }
